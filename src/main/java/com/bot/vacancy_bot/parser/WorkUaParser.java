@@ -25,7 +25,9 @@ public class WorkUaParser implements VacancyParser {
         List<Vacancy> vacancies = new ArrayList<>();
         try {
             Document doc = Jsoup.connect(WORK_UA_URL)
-                    .userAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64)")
+                    .userAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) " +
+                            "Chrome/122.0.0.0 Safari/537.36")
+                    .referrer("https://www.google.com/")
                     .get();
 
             Elements elements = doc.select("div.card.job-link");
