@@ -1,0 +1,17 @@
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5432/vacancydb
+    username: bot_user
+    password: ${DB_PASSWORD}
+  jpa:
+    database-platform: org.hibernate.dialect.PostgreSQLDialect
+    hibernate:
+      ddl-auto: update
+
+telegram:
+  bot:
+    username: my_java_jobs_bot
+    token: ${BOT_TOKEN}
+    chat-id: ${CHAT_ID}
+
+
