@@ -13,6 +13,7 @@ import java.io.IOException;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Random;
 
 @Slf4j
 @Component
@@ -24,6 +25,7 @@ public class WorkUaParser implements VacancyParser {
     public List<Vacancy> parseVacancies() {
         List<Vacancy> vacancies = new ArrayList<>();
         try {
+            Thread.sleep(2000 + new Random().nextInt(3000));
             Document doc = Jsoup.connect(WORK_UA_URL)
                     .userAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36")
                     .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8")
@@ -96,6 +98,8 @@ public class WorkUaParser implements VacancyParser {
             }
         } catch (IOException e) {
             log.error("Ошибка при парсинге Work.ua: {}", e.getMessage());
+        } catch (InterruptedException e) {
+            throw new RuntimeException(e);
         }
         return vacancies;
     }
