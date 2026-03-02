@@ -2,6 +2,8 @@ package com.bot.vacancy_bot.parser;
 
 import com.bot.vacancy_bot.model.Vacancy;
 import com.bot.vacancy_bot.util.VacancyUtils;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
@@ -20,15 +22,13 @@ import java.util.Objects;
 public class DjinniParser implements VacancyParser {
 
     private static final String DJINNI_RSS_URL = "https://djinni.co/jobs/rss/?primary_keyword=Java&employment=remote";
+    private final ObjectMapper mapper = new ObjectMapper(); // Jackson для JSON-LD
 
     @Override
     public List<Vacancy> parseVacancies() {
         List<Vacancy> vacancies = new ArrayList<>();
         try {
-            Document doc = Jsoup.connect(DJINNI_RSS_URL)
-                    .parser(Parser.xmlParser())
-                    .get();
-
+            Document doc = Jsoup.connect(DJINNI_RSS_URL).parser(Parser.xmlParser()).get();
             Elements items = doc.select("item");
 
             for (Element item : items) {
@@ -36,72 +36,75 @@ public class DjinniParser implements VacancyParser {
                 String url = Objects.requireNonNull(item.selectFirst("link")).text();
                 String pubDate = Objects.requireNonNull(item.selectFirst("pubDate")).text();
 
-                String descriptionHtml = Objects.requireNonNull(item.selectFirst("description")).text();
+                // 1. Правильный парсинг описания (совет 1)
+                String descriptionHtml = Objects.requireNonNull(item.selectFirst("description")).html();
                 String descriptionText = Jsoup.parse(descriptionHtml).text();
 
                 String title = titleFull;
                 String company = "Не указана";
-                String location = "Remote";
 
-                // 1. Пытаемся достать компанию из RSS
-                String normalizedTitle = titleFull.replaceAll("\\s+", " ");
-                if (normalizedTitle.contains(" at ")) {
-                    String[] parts = normalizedTitle.split(" at ");
-                    title = parts[0].trim();
+                // 2. Достаем компанию из <author> (совет 2)
+                Element author = item.selectFirst("author");
+                if (author != null && !author.text().isBlank()) {
+                    company = author.text().trim();
+                } else {
+                    String[] parts = titleFull.split("(?i)\\s+at\\s+");
                     if (parts.length > 1) {
+                        title = parts[0].trim();
                         company = parts[1].trim();
                     }
                 }
 
-                // 🔴 2. УМНЫЙ БЛОК: Если компании в RSS нет, идем прямо на страницу вакансии!
-                if (company.equals("Не указана")) {
+                // 3. Используем флаг для проверки (совет 3)
+                boolean companyMissing = company.equals("Не указана") || company.toLowerCase().contains("hidden");
+
+                if (companyMissing) {
                     try {
                         Document page = Jsoup.connect(url)
-                                .userAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
-                                .get();
+                                .userAgent("Mozilla/5.0")
+                                .timeout(5000).get();
 
-                        // Заголовок страницы всегда формата "Title at Company | Djinni"
-                        String pageTitle = page.title();
-                        if (pageTitle.contains(" at ") && pageTitle.contains(" | Djinni")) {
-                            String afterAt = pageTitle.substring(pageTitle.lastIndexOf(" at ") + 4);
-                            company = afterAt.replace(" | Djinni", "").trim();
+                        // 4. Используем Jackson для JSON-LD (совет 4)
+                        Element jsonLdScript = page.selectFirst("script[type='application/ld+json']");
+                        if (jsonLdScript != null) {
+                            JsonNode root = mapper.readTree(jsonLdScript.html());
+                            JsonNode hiringOrg = root.path("hiringOrganization").path("name");
+                            if (!hiringOrg.isMissingNode()) {
+                                company = hiringOrg.asText();
+                                companyMissing = false; // Нашли!
+                            }
+                        }
+
+                        // 5. План Б: точный селектор (совет 5)
+                        if (companyMissing) {
+                            Element companyEl = page.selectFirst("[data-test='company-name']");
+                            if (companyEl != null) {
+                                company = companyEl.text().trim();
+                            }
                         }
                     } catch (Exception e) {
-                        log.warn("Не удалось перейти на страницу Djinni для поиска компании: {}", url);
+                        log.warn("Djinni: не удалось прочитать страницу {}", url);
                     }
                 }
 
+                if (company.equals("Не указана")) company = "Hidden Company (Djinni)";
+
+                // Твоя стандартная логика фильтрации
                 String titleLower = title.toLowerCase();
+                if (VacancyUtils.shouldIgnore(titleLower)) continue;
 
-                if (VacancyUtils.shouldIgnore(titleLower)) {
-                    continue;
-                }
-
-                String role = VacancyUtils.getRole(titleLower);
-                String experience = VacancyUtils.extractExperience(descriptionText);
                 String cleanDate = pubDate.length() > 16 ? pubDate.substring(0, 16) : pubDate;
+                if (VacancyUtils.isOldVacancy(cleanDate)) continue;
 
-                if (VacancyUtils.isOldVacancy(cleanDate)) {
-                    continue;
-                }
-
-                Vacancy vacancy = Vacancy.builder()
-                        .title(title)
-                        .company(company)
-                        .location(location)
-                        .role(role)
-                        .experience(experience)
-                        .postedDate(cleanDate)
-                        .url(url)
-                        .shortDescription("")
-                        .siteName(getSiteName())
-                        .parsedAt(LocalDateTime.now())
-                        .build();
-
-                vacancies.add(vacancy);
+                vacancies.add(Vacancy.builder()
+                        .title(title).company(company).location("Remote")
+                        .role(VacancyUtils.getRole(titleLower))
+                        .experience(VacancyUtils.extractExperience(title + " " + descriptionText))
+                        .postedDate(cleanDate).url(url).siteName(getSiteName())
+                        .parsedAt(LocalDateTime.now()).build());
             }
         } catch (Exception e) {
-            log.error("Ошибка при парсинге Djinni: {}", e.getMessage());
+            log.error("Ошибка Djinni: {}", e.getMessage());
         }
         return vacancies;
     }

@@ -18,7 +18,7 @@ import java.util.List;
 @Component
 public class DouParser implements VacancyParser {
 
-    private static final String DOU_URL = "https://jobs.dou.ua/vacancies/?category=Java";
+    private static final String DOU_URL = "https://jobs.dou.ua/vacancies/?category=Java&remote";
 
     @Override
     public List<Vacancy> parseVacancies() {

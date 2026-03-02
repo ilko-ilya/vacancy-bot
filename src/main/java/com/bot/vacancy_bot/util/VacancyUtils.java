@@ -19,6 +19,8 @@ public class VacancyUtils {
                 titleLower.contains("fullstack") ||
                 titleLower.contains("full-stack") ||
                 titleLower.contains("front") ||
+                titleLower.contains("android") ||
+                titleLower.contains("ios") ||
                 titleLower.contains("qa") ||
                 titleLower.contains("automation") ||
                 titleLower.contains("test");
@@ -42,27 +44,29 @@ public class VacancyUtils {
 
     // Метод для поиска опыта работы в тексте
     public static String extractExperience(String text) {
-        if (text == null || text.isEmpty()) {
-            return "Не указан";
+        if (text == null || text.isEmpty()) return "Не указан";
+
+        String cleanText = text.replaceAll("<[^>]*>", " ").toLowerCase();
+
+        // 1. Расширяем список фраз для новичков
+        if (cleanText.contains("без опыта") || cleanText.contains("без досвіду") ||
+                cleanText.contains("no experience") || cleanText.contains("без комерційного") ||
+                cleanText.contains("мінімальним досвідом") || cleanText.contains("початківець") ||
+                cleanText.contains("trainee") || cleanText.contains("intern")) {
+            return "Без опыта / Минимальный";
         }
 
-        String lower = text.toLowerCase();
-
-        // Проверяем джунские вакансии
-        if (lower.contains("без опыта") || lower.contains("без досвіду") || lower.contains("no experience")) {
-            return "Без опыта";
-        }
-
-        // Ищем фразы: "от 2 лет", "2+ years", "від 1 року", "3-х лет"
-        Pattern pattern = Pattern.compile("(?:от|від|from)?\\s*(\\d{1,2})\\s*(?:\\+|\\-х|-ти)?\\s*(?:лет|года|год|років|роки|року|years|year)");
-        Matcher matcher = pattern.matcher(lower);
+        // 2. Регулярка для поиска цифр
+        Pattern pattern = Pattern.compile("(?i)(?:от|від|from)?\\s*(\\d{1,2})\\s*(?:\\+|[-—]\\s*\\d+|-х|-ти)?\\s*(?:лет|года|год|років|роки|року|рік|years|year|yrs)");
+        Matcher matcher = pattern.matcher(cleanText);
 
         if (matcher.find()) {
-            int years = Integer.parseInt(matcher.group(1));
-            // Защита от бреда (например, если случайно спарсился 2024 год)
-            if (years > 0 && years <= 15) {
-                return "От " + years + " лет";
-            }
+            return "От " + matcher.group(1) + " лет";
+        }
+
+        // 3. ПЛАН «Б»: Если ничего не нашли, но в заголовке есть "Junior"
+        if (cleanText.contains("junior")) {
+            return "Без опыта / Junior";
         }
 
         return "Не указан";
@@ -74,7 +78,7 @@ public class VacancyUtils {
             return false;
         }
 
-        String lower = dateText.toLowerCase();
+        String lower = dateText.toLowerCase().trim().replace("\u00a0", " ");
 
         // 1. Быстрые отсечения (Work.ua: недели, месяцы, годы)
         if (lower.contains("тиж") || lower.contains("нед") ||

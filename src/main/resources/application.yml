@@ -1,12 +1,11 @@
 spring:
   datasource:
     url: jdbc:postgresql://localhost:5432/vacancydb
-    username: bot_user
-    password: ${DB_PASSWORD}
+    username: postgres
+    password: Q12345w6
   jpa:
-    database-platform: org.hibernate.dialect.PostgreSQLDialect
     hibernate:
-      ddl-auto: update
+      ddl-auto: create
 
 telegram:
   bot:

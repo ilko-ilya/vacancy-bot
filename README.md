@@ -17,7 +17,6 @@ An efficient Telegram bot built with **Java 21** and **Spring Boot 4.0.3** to au
 The bot performs multi-threaded parsing of the following resources:
 * **DOU.ua**
 * **Djinni.co**
-* **Work.ua**
 * **GlobalLogic**
 * **DataArt**
 
