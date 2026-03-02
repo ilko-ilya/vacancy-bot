@@ -58,6 +58,8 @@ Integration method depends on platform capabilities:
 
 ## ✨ Key Features
 
+This bot automates the routine of job hunting by providing the following core capabilities:
+
 ### ⚡ Real-Time Vacancy Processing
 New vacancies are processed immediately after discovery and sent to Telegram without delay.
 
@@ -82,7 +84,6 @@ Filtering by:
 > ⏳ **Опыт:** от 2-х лет<br>
 > 📅 **Опубликовано:** 2 March<br>
 > 🔗 **View Source**
-
 ---
 
 ## 🚀 Getting Started
