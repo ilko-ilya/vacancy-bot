@@ -10,6 +10,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 @Slf4j
@@ -63,6 +64,21 @@ public class VacancyScheduler {
                     log.info("Отправлена вакансия: {}", vacancy.getTitle());
                 }
             }
+        }
+    }
+
+    @Scheduled(cron = "0 0 3 * * *")
+    public void cleanUpDatabase() {
+        log.info("Запуск автоматической очистки старых вакансий...");
+
+        // Вычисляем дату, которая была ровно 1 месяц назад
+        LocalDateTime oneMonthAgo = LocalDateTime.now().minusMonths(1);
+
+        try {
+            int deletedCount = vacancyRepository.deleteOldVacancies(oneMonthAgo);
+            log.info("Очистка завершена. Удалено старых вакансий: {}", deletedCount);
+        } catch (Exception e) {
+            log.error("Ошибка при удалении старых вакансий: {}", e.getMessage());
         }
     }
 }
