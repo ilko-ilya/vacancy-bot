@@ -4,134 +4,119 @@ import lombok.NonNull;
 
 import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 public class VacancyUtils {
 
-    // Метод проверяет, нужно ли пропустить вакансию (возвращает true, если это мусор)
+    // 1. Идеально: вынесли ключевые слова в Set (O(1) чтение, чистота кода)
+    private static final Set<String> IGNORE_KEYWORDS = Set.of(
+            "senior", "lead", "head", "architect", "principal", "manager",
+            "cto", "director", "vp", "fullstack", "full stack", "full-stack",
+            "frontend", "front-end", "android", "ios", "qa", "automation", "test"
+    );
+
     public static boolean shouldIgnore(String titleLower) {
-        return titleLower.contains("senior") ||
-                titleLower.contains("lead") ||
-                titleLower.contains("architect") ||
-                titleLower.contains("principal") ||
-                titleLower.contains("full stack") ||
-                titleLower.contains("fullstack") ||
-                titleLower.contains("full-stack") ||
-                titleLower.contains("front") ||
-                titleLower.contains("android") ||
-                titleLower.contains("ios") ||
-                titleLower.contains("qa") ||
-                titleLower.contains("automation") ||
-                titleLower.contains("test");
-    }
-
-    // Твой метод для определения грейда
-    public static @NonNull String getRole(String titleLower) {
-        String role = "Java Developer";
-
-        if (titleLower.contains("strong junior")) {
-            role = "Strong Junior Java Developer";
-        } else if (titleLower.contains("junior")) {
-            role = "Junior Java Developer";
-        } else if (titleLower.contains("strong middle")) {
-            role = "Strong Middle Java Developer";
-        } else if (titleLower.contains("middle")) {
-            role = "Middle Java Developer";
+        for (String keyword : IGNORE_KEYWORDS) {
+            if (titleLower.contains(keyword)) {
+                return true;
+            }
         }
-        return role;
+        return false;
     }
 
-    // Метод для поиска опыта работы в тексте
+    // 2. Идеально: ранние возвраты (early return)
+    public static @NonNull String getRole(String titleLower) {
+        if (titleLower.contains("strong junior")) return "Strong Junior Java Developer";
+        if (titleLower.contains("junior")) return "Junior Java Developer";
+        if (titleLower.contains("strong middle")) return "Strong Middle Java Developer";
+        if (titleLower.contains("middle")) return "Middle Java Developer";
+        return "Java Developer";
+    }
+
+    // 3. Сохранили твой богатый словарь + нашу новую мощную регулярку
     public static String extractExperience(String text) {
-        if (text == null || text.isEmpty()) return "Не указан";
+        if (text == null || text.isBlank()) return "Не указан";
 
         String cleanText = text.replaceAll("<[^>]*>", " ").toLowerCase();
 
-        // 1. Расширяем список фраз для новичков
-        if (cleanText.contains("без опыта") || cleanText.contains("без досвіду") ||
-                cleanText.contains("no experience") || cleanText.contains("без комерційного") ||
-                cleanText.contains("мінімальним досвідом") || cleanText.contains("початківець") ||
-                cleanText.contains("trainee") || cleanText.contains("intern")) {
+        // 1. ШАГ ПЕРВЫЙ: Ищем явные цифры (Приоритет №1)
+        Pattern pattern = Pattern.compile("(?i)(?:від\\s*|от\\s*|more than\\s*)?(\\d+)\\s*(?:[-–—]\\s*\\d+" +
+                "\\s*)?\\+?\\s*(?:years?|yrs?|рок[іи]в?|року|лет|год[ау]?)");
+        Matcher matcher = pattern.matcher(cleanText);
+
+        while (matcher.find()) {
+            try {
+                int years = Integer.parseInt(matcher.group(1));
+                if (years > 0 && years <= 15) {
+                    return matcher.group(0).trim();
+                }
+            } catch (Exception ignored) {}
+        }
+
+        // 2. ШАГ ВТОРОЙ: Если цифр НЕТ, ищем маркеры новичков
+        // (?iU) включает поддержку юникода. \b означает "граница слова".
+        Pattern noExpPattern = Pattern.compile("(?iU)\\b(без опыта|без досвіду|no experience|без комерційног" +
+                "о|початківець|trainee|intern)\\b");
+        if (noExpPattern.matcher(cleanText).find()) {
             return "Без опыта / Минимальный";
         }
 
-        // 2. Регулярка для поиска цифр
-        Pattern pattern = Pattern.compile("(?i)(?:от|від|from)?\\s*(\\d{1,2})\\s*(?:\\+|[-—]\\s*\\d+|-х|-ти)?\\s*(?:лет|года|год|років|роки|року|рік|years|year|yrs)");
-        Matcher matcher = pattern.matcher(cleanText);
-
-        if (matcher.find()) {
-            return "От " + matcher.group(1) + " лет";
-        }
-
-        // 3. ПЛАН «Б»: Если ничего не нашли, но в заголовке есть "Junior"
-        if (cleanText.contains("junior")) {
-            return "Без опыта / Junior";
-        }
+        // 3. Запасной план
+        if (cleanText.contains("junior")) return "Без опыта / Junior";
 
         return "Не указан";
     }
 
-    // Метод возвращает true, если вакансия слишком старая
+    // 4. Логика работы с датами
     public static boolean isOldVacancy(String dateText) {
-        if (dateText == null || dateText.isEmpty()) {
-            return false;
-        }
+        if (dateText == null || dateText.isBlank()) return false;
 
         String lower = dateText.toLowerCase().trim().replace("\u00a0", " ");
 
-        // 1. Быстрые отсечения (Work.ua: недели, месяцы, годы)
-        if (lower.contains("тиж") || lower.contains("нед") ||
-                lower.contains("міс") || lower.contains("мес") ||
+        // Быстрые проверки
+        if (lower.contains("тиж") || lower.contains("нед") || lower.contains("week") ||
+                lower.contains("міс") || lower.contains("мес") || lower.contains("month") ||
                 lower.contains("рік") || lower.contains("год") || lower.contains("лет")) {
             return true;
         }
 
-        // 2. Обработка дней для Work.ua ("5 днів тому", "12 дней назад")
-        if (lower.contains("дн") || lower.contains("дня") || lower.contains("днів") || lower.contains("дней")) {
+        // Относительные дни ("5 днів тому")
+        if (lower.contains("дн") || lower.contains("дня") || lower.contains("days")) {
             int days = extractFirstNumber(lower);
-            return days > 5; // Если больше 5 дней - старая
+            return days > 5;
         }
 
-        // 3. Обработка абсолютных дат для DOU ("25 февраля", "12 січня")
+        // Абсолютные даты для DOU ("25 февраля")
         int month = getMonthNumber(lower);
         if (month != -1) {
             int day = extractFirstNumber(lower);
             if (day > 0 && day <= 31) {
                 int currentYear = LocalDate.now().getYear();
                 try {
-                    // Собираем дату из того, что спарсили
                     LocalDate vacancyDate = LocalDate.of(currentYear, month, day);
-
-                    // Если вакансия "из будущего" (например, в январе парсим "25 декабря"), значит это прошлый год
                     if (vacancyDate.isAfter(LocalDate.now())) {
                         vacancyDate = vacancyDate.minusYears(1);
                     }
-
-                    // Считаем реальную разницу в днях
                     long daysBetween = ChronoUnit.DAYS.between(vacancyDate, LocalDate.now());
                     return daysBetween > 5;
                 } catch (Exception e) {
-                    return false; // В случае ошибки парсинга лучше пропустить фильтр, чтобы не потерять вакансию
+                    return false;
                 }
             }
         }
-
-        // Если это "Вчора", "Сьогодні", "Только что" и т.д. (цифр нет)
         return false;
     }
 
-    // Вспомогательный метод: вытаскивает первое число из строки ("3 дні" -> 3)
     private static int extractFirstNumber(String text) {
         Matcher matcher = Pattern.compile("\\d+").matcher(text);
         if (matcher.find()) {
             return Integer.parseInt(matcher.group());
         }
-        return -1; // Если цифр нет
+        return -1;
     }
 
-    // Вспомогательный метод: переводит рус/укр название месяца в его номер
-    // Вспомогательный метод: переводит рус/укр/англ название месяца в его номер
     private static int getMonthNumber(String text) {
         if (text.contains("янв") || text.contains("січ") || text.contains("jan")) return 1;
         if (text.contains("фев") || text.contains("лют") || text.contains("feb")) return 2;
