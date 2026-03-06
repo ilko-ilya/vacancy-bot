@@ -25,7 +25,6 @@ import java.util.concurrent.TimeoutException;
 public class DouParser implements VacancyParser {
 
     private static final String DOU_URL = "https://jobs.dou.ua/vacancies/?category=Java&remote";
-
     private final ExecutorService douParserExecutor;
 
     public DouParser(@Qualifier("douParserExecutor") ExecutorService douParserExecutor) {
@@ -37,7 +36,6 @@ public class DouParser implements VacancyParser {
         List<Vacancy> vacancies = new ArrayList<>();
 
         try {
-            // 1. Загружаем главную страницу с игнорированием ошибок HTTP и редиректами
             Document doc = Jsoup.connect(DOU_URL)
                     .userAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64)")
                     .timeout(10000)
@@ -56,7 +54,6 @@ public class DouParser implements VacancyParser {
                 String url = titleElement.attr("href");
                 String titleLower = title.toLowerCase();
 
-                // Пре-фильтрация: игнорируем неподходящие технологии
                 if (VacancyUtils.shouldIgnore(titleLower)) {
                     continue;
                 }
@@ -64,7 +61,6 @@ public class DouParser implements VacancyParser {
                 Element dateElement = element.selectFirst(".date");
                 String dateText = dateElement != null ? dateElement.text() : "Недавно";
 
-                // Пре-фильтрация: игнорируем старые вакансии
                 if (VacancyUtils.isOldVacancy(dateText)) {
                     continue;
                 }
@@ -77,14 +73,13 @@ public class DouParser implements VacancyParser {
 
                 String role = VacancyUtils.getRole(titleLower);
 
-                // 2. Формируем задачу (Callable) для парсинга отдельной страницы
+                // --- ЗАДАЧА ДЛЯ ПАРАЛЛЕЛЬНОГО ВЫПОЛНЕНИЯ ---
                 Callable<Vacancy> task = () -> {
                     String description = "";
-                    String experience = "Не указан";
 
                     try {
                         Document vacancyPage = Jsoup.connect(url)
-                                .userAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64)")
+                                .userAgent("Mozilla/5.0")
                                 .timeout(10000)
                                 .ignoreHttpErrors(true)
                                 .followRedirects(true)
@@ -93,13 +88,20 @@ public class DouParser implements VacancyParser {
                         Element vacancyText = vacancyPage.selectFirst(".b-typo");
                         if (vacancyText != null) {
                             description = vacancyText.text();
-                            experience = VacancyUtils.extractExperience(description);
                         }
-
                     } catch (Exception e) {
                         log.warn("Ошибка при открытии детализации вакансии [{}]: {}", url, e.getMessage());
                     }
 
+                    // 1. Скармливаем утилите заголовок + описание (даже если оно пустое из-за ошибки)
+                    String experience = VacancyUtils.extractExperience(title + " " + description);
+
+                    // 2. Если сеньор - убиваем вакансию
+                    if ("OVERQUALIFIED".equals(experience)) {
+                        return null;
+                    }
+
+                    // 3. Возвращаем чистую вакансию
                     return Vacancy.builder()
                             .title(title)
                             .company(company)
@@ -116,11 +118,9 @@ public class DouParser implements VacancyParser {
                             .build();
                 };
 
-                // 3. Отправляем задачу в наш пул потоков
                 futures.add(douParserExecutor.submit(task));
             }
 
-            // 4. Ожидаем результаты с жестким таймаутом (15 секунд)
             for (Future<Vacancy> future : futures) {
                 try {
                     Vacancy vacancy = future.get(15, TimeUnit.SECONDS);
@@ -129,9 +129,9 @@ public class DouParser implements VacancyParser {
                     }
                 } catch (TimeoutException e) {
                     log.warn("Таймаут при парсинге страницы DOU (15 сек). Задача отменена.");
-                    future.cancel(true); // Убиваем зависший поток
+                    future.cancel(true);
                 } catch (Exception e) {
-                    log.warn("Ошибка при получении результата параллельного парсинга: {}", e.getMessage());
+                    log.warn("Ошибка при получении результата: {}", e.getMessage());
                 }
             }
 

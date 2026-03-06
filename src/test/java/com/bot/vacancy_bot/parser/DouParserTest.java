@@ -1,15 +1,46 @@
 package com.bot.vacancy_bot.parser;
 
 import com.bot.vacancy_bot.model.Vacancy;
+import com.bot.vacancy_bot.util.VacancyUtils;
 import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
 
 import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 class DouParserTest {
+
+    @Test
+    void testDouParserFiltersOverqualified() {
+        System.out.println("=== СТАРТ ТЕСТА DOU PARSER ===");
+        // Создаем временный пул на 3 потока чисто для теста
+        ExecutorService testExecutor = Executors.newFixedThreadPool(3);
+        DouParser parser = new DouParser(testExecutor);
+
+        List<Vacancy> vacancies = parser.parseVacancies();
+
+        System.out.println("Найдено подходящих вакансий: " + vacancies.size());
+        boolean hasSeniors = false;
+
+        for (Vacancy v : vacancies) {
+            // Добавил вывод URL в консоль!
+            System.out.println("- " + v.getTitle() + " | Опыт: " + v.getExperience() + " | " + v.getUrl());
+
+            if ("OVERQUALIFIED".equals(v.getExperience()) ||
+                    v.getExperience().contains("4") ||
+                    v.getExperience().contains("5")) {
+                System.err.println("❌ ПРОПУЩЕН СЕНЬОР: " + v.getTitle() + " | " + v.getUrl());
+                hasSeniors = true;
+            }
+        }
+
+        if (!hasSeniors) System.out.println("✅ DOU чист! Сеньоров нет.");
+
+        // Обязательно закрываем пул потоков, иначе тест "зависнет" в ожидании
+        testExecutor.shutdown();
+        System.out.println("====================================\n");
+    }
+
     @Test
     void testParseVacancies() {
         System.out.println("=== НАЧИНАЕМ ТЕСТ ПАРСЕРА DOU ===");
@@ -41,6 +72,35 @@ class DouParserTest {
 
         // Закрываем тестовый пул
         testExecutor.shutdown();
+    }
+
+
+
+    @Test
+    void testExtractExperienceLogic() {
+        System.out.println("=== СТАРТ ТЕСТА УМНОГО ФИЛЬТРА ОПЫТА ===");
+
+        // 1. Идеальный кандидат (ровно 2 года)
+        String text1 = "Шукаємо розробника. Вимоги: від 2 років досвіду з Java.";
+        System.out.println("Тест 1 (2 года): " + VacancyUtils.extractExperience(text1));
+
+        // 2. Слишком опытный (сеньор, 5 лет)
+        String text2 = "Looking for a developer with 5+ years of experience in Spring.";
+        System.out.println("Тест 2 (5+ лет): " + VacancyUtils.extractExperience(text2));
+
+        // 3. Стажер (без цифр, но с ключевыми словами)
+        String text3 = "Відкрита позиція Trainee Java Developer. Без комерційного досвіду.";
+        System.out.println("Тест 3 (Trainee): " + VacancyUtils.extractExperience(text3));
+
+        // 4. Пограничный случай (ровно 3 года - должно пройти!)
+        String text4 = "Required: 3 years of commercial experience";
+        System.out.println("Тест 4 (3 года): " + VacancyUtils.extractExperience(text4));
+
+        // 5. Опасный ложный стажер (как было с Intelliarts: 4 года опыта, но есть слово intern)
+        String text5 = "4+ years of experience. You will mentor interns and juniors.";
+        System.out.println("Тест 5 (4 года + intern): " + VacancyUtils.extractExperience(text5));
+
+        System.out.println("========================================");
     }
 
 }

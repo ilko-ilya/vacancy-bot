@@ -66,6 +66,15 @@ public class DataArtParser implements VacancyParser {
                 String url = "https://dataart.team/vacancies/" + slug;
                 String role = VacancyUtils.getRole(titleLower);
 
+                String experience = VacancyUtils.extractExperience(title);
+                if ("OVERQUALIFIED".equals(experience)) {
+                    continue;
+                }
+                // Если опыт не нашли в заголовке, ставим твою заглушку
+                if ("Не указан".equals(experience)) {
+                    experience = "Смотреть на сайте";
+                }
+
                 String location = "Уточняйте";
                 JsonNode locationTags = item.path("locationTags");
 
@@ -93,7 +102,7 @@ public class DataArtParser implements VacancyParser {
                         .company("DataArt")
                         .location(location)
                         .role(role)
-                        .experience("Смотреть на сайте")
+                        .experience(experience)
                         .postedDate("Свежая (DataArt)")
                         .url(url)
                         .shortDescription("")

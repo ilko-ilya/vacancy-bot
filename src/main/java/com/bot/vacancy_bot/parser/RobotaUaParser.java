@@ -71,13 +71,20 @@ public class RobotaUaParser implements VacancyParser {
                 String postedDate = item.path("sortDateText").asText("Недавно");
                 if (VacancyUtils.isOldVacancy(postedDate)) continue;
 
+                String description = item.path("description").asText("");
+                String experience = VacancyUtils.extractExperience(title + " " + description);
+
+                if ("OVERQUALIFIED".equals(experience)) {
+                    continue; // Скипаем, если опыта больше 3 лет!
+                }
+
                 vacancies.add(Vacancy.builder()
                         .title(title)
                         .company(item.path("company").path("name").asText("Компания"))
                         .url(finalUrl) // 🔴 Теперь ссылка откроется без 404!
                         .location(item.path("city").path("name").asText("Киев / Удаленно"))
                         .role(VacancyUtils.getRole(title.toLowerCase()))
-                        .experience(VacancyUtils.extractExperience(title + " " + item.path("description").asText("")))
+                        .experience(experience)
                         .postedDate(postedDate)
                         .siteName(getSiteName())
                         .parsedAt(LocalDateTime.now())

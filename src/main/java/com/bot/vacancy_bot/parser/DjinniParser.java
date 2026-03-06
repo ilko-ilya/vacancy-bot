@@ -16,6 +16,8 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 @Slf4j
 @Component
@@ -36,14 +38,14 @@ public class DjinniParser implements VacancyParser {
                 String url = Objects.requireNonNull(item.selectFirst("link")).text();
                 String pubDate = Objects.requireNonNull(item.selectFirst("pubDate")).text();
 
-                // 1. Правильный парсинг описания (совет 1)
+                // 1. Правильный парсинг описания
                 String descriptionHtml = Objects.requireNonNull(item.selectFirst("description")).html();
                 String descriptionText = Jsoup.parse(descriptionHtml).text();
 
                 String title = titleFull;
                 String company = "Не указана";
 
-                // 2. Достаем компанию из <author> (совет 2)
+                // 2. Достаем компанию из <author>
                 Element author = item.selectFirst("author");
                 if (author != null && !author.text().isBlank()) {
                     company = author.text().trim();
@@ -55,53 +57,77 @@ public class DjinniParser implements VacancyParser {
                     }
                 }
 
-                // 3. Используем флаг для проверки (совет 3)
                 boolean companyMissing = company.equals("Не указана") || company.toLowerCase().contains("hidden");
+                String sidebarText = ""; // Сюда сложим текст скрытых плашек
 
-                if (companyMissing) {
-                    try {
-                        Document page = Jsoup.connect(url)
-                                .userAgent("Mozilla/5.0")
-                                .timeout(5000).get();
+                // 3. --- ГЛУБОКИЙ ПАРСИНГ (Заходим на страницу вакансии) ---
+                try {
+                    Document page = Jsoup.connect(url)
+                            .userAgent("Mozilla/5.0")
+                            .timeout(5000).get();
 
-                        // 4. Используем Jackson для JSON-LD (совет 4)
+                    // Берем абсолютно ВЕСЬ текст страницы (защита от смены верстки)
+                    String fullPageText = page.text();
+
+                    // Бронебойный поиск именно зеленых плашек Djinni
+                    Matcher djinniExpMatcher = Pattern.compile("(?i)(?:виключно\\s*)?від\\s*(\\d+)\\s*(?:року|рок[іи]в|рік)\\s*досвіду").matcher(fullPageText);
+                    if (djinniExpMatcher.find()) {
+                        sidebarText = djinniExpMatcher.group(0); // Нашли точную фразу!
+                    }
+
+                    // Если компании всё еще нет, ищем её (через JSON-LD или селектор)
+                    if (companyMissing) {
                         Element jsonLdScript = page.selectFirst("script[type='application/ld+json']");
                         if (jsonLdScript != null) {
                             JsonNode root = mapper.readTree(jsonLdScript.html());
                             JsonNode hiringOrg = root.path("hiringOrganization").path("name");
                             if (!hiringOrg.isMissingNode()) {
                                 company = hiringOrg.asText();
-                                companyMissing = false; // Нашли!
+                                companyMissing = false;
                             }
                         }
-
-                        // 5. План Б: точный селектор (совет 5)
                         if (companyMissing) {
                             Element companyEl = page.selectFirst("[data-test='company-name']");
                             if (companyEl != null) {
                                 company = companyEl.text().trim();
                             }
                         }
-                    } catch (Exception e) {
-                        log.warn("Djinni: не удалось прочитать страницу {}", url);
                     }
+                } catch (Exception e) {
+                    log.warn("Djinni: не удалось прочитать страницу {} - {}", url, e.getMessage());
                 }
+                // -------------------------------------------------------------
 
                 if (company.equals("Не указана")) company = "Hidden Company (Djinni)";
 
-                // Твоя стандартная логика фильтрации
+                // Логика фильтрации
                 String titleLower = title.toLowerCase();
                 if (VacancyUtils.shouldIgnore(titleLower)) continue;
 
                 String cleanDate = pubDate.length() > 16 ? pubDate.substring(0, 16) : pubDate;
                 if (VacancyUtils.isOldVacancy(cleanDate)) continue;
 
+                // 4. --- ПРОВЕРКА ОПЫТА ---
+                // Скармливаем утилите: Заголовок + Текст из плашек + Описание
+                String fullTextToAnalyze = title + " " + sidebarText + " " + descriptionText;
+                String experience = VacancyUtils.extractExperience(fullTextToAnalyze);
+
+                // Жесткий фильтр: отсекаем сеньоров
+                if ("OVERQUALIFIED".equals(experience)) {
+                    continue;
+                }
+
                 vacancies.add(Vacancy.builder()
-                        .title(title).company(company).location("Remote")
+                        .title(title)
+                        .company(company)
+                        .location("Remote")
                         .role(VacancyUtils.getRole(titleLower))
-                        .experience(VacancyUtils.extractExperience(title + " " + descriptionText))
-                        .postedDate(cleanDate).url(url).siteName(getSiteName())
-                        .parsedAt(LocalDateTime.now()).build());
+                        .experience(experience)
+                        .postedDate(cleanDate)
+                        .url(url)
+                        .siteName(getSiteName())
+                        .parsedAt(LocalDateTime.now())
+                        .build());
             }
         } catch (Exception e) {
             log.error("Ошибка Djinni: {}", e.getMessage());

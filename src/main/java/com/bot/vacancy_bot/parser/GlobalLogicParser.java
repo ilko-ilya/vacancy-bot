@@ -56,6 +56,11 @@ public class GlobalLogicParser implements VacancyParser {
                 // 2. Определение грейда
                 String role = VacancyUtils.getRole(titleLower);
 
+                String experienceExtracted = VacancyUtils.extractExperience(title);
+                if ("OVERQUALIFIED".equals(experienceExtracted)) {
+                    continue;
+                }
+
                 // Дату и опыт на главной странице GL не пишет, ставим заглушки
                 String experience = "Не указан (см. на сайте)";
                 String postedDate = "Свежая на GlobalLogic";

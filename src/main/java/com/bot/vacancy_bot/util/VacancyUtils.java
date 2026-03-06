@@ -38,32 +38,45 @@ public class VacancyUtils {
     // 3. Сохранили твой богатый словарь + нашу новую мощную регулярку
     public static String extractExperience(String text) {
         if (text == null || text.isBlank()) return "Не указан";
-
         String cleanText = text.replaceAll("<[^>]*>", " ").toLowerCase();
 
-        // 1. ШАГ ПЕРВЫЙ: Ищем явные цифры (Приоритет №1)
-        Pattern pattern = Pattern.compile("(?i)(?:від\\s*|от\\s*|more than\\s*)?(\\d+)\\s*(?:[-–—]\\s*\\d+" +
-                "\\s*)?\\+?\\s*(?:years?|yrs?|рок[іи]в?|року|лет|год[ау]?)");
+        Pattern pattern = Pattern.compile("(?i)(?:від\\s*|от\\s*|more than\\s*)?(\\d+)\\s*(?:[-–—]\\s*\\d+\\s*)?\\+?\\s*(?:years?|yrs?|рок[іи]в?|року|рік|лет|год[ау]?)");
         Matcher matcher = pattern.matcher(cleanText);
+
+        String validExperience = null;
+        int maxValidYears = 0; // <-- НОВЫЙ СЧЕТЧИК: Запоминаем самый большой "разрешенный" опыт
 
         while (matcher.find()) {
             try {
                 int years = Integer.parseInt(matcher.group(1));
-                if (years > 0 && years <= 15) {
-                    return matcher.group(0).trim();
+
+                // 🚨 УБИВАЕМ СЕНЬОРОВ: Если нашли 4, 5, 6... сразу бракуем!
+                if (years > 3 && years <= 15) {
+                    return "OVERQUALIFIED";
+                }
+
+                // ✅ ЗАПОМИНАЕМ МАКСИМУМ ДЛЯ ДЖУНОВ/МИДЛОВ:
+                // Если мы нашли число от 1 до 3, проверяем, больше ли оно того, что мы уже нашли
+                if (years > 0 && years <= 3) {
+                    if (years > maxValidYears) {
+                        maxValidYears = years; // Обновляем рекорд
+                        validExperience = matcher.group(0).trim(); // Запоминаем строку (например, "2+ years")
+                    }
                 }
             } catch (Exception ignored) {}
         }
 
-        // 2. ШАГ ВТОРОЙ: Если цифр НЕТ, ищем маркеры новичков
-        // (?iU) включает поддержку юникода. \b означает "граница слова".
-        Pattern noExpPattern = Pattern.compile("(?iU)\\b(без опыта|без досвіду|no experience|без комерційног" +
-                "о|початківець|trainee|intern)\\b");
+        // Возвращаем самое большое найденное подходящее число
+        if (validExperience != null) {
+            return validExperience;
+        }
+
+        // Ищем маркеры стажеров
+        Pattern noExpPattern = Pattern.compile("(?iU)\\b(без опыта|без досвіду|no experience|без комерційного|початківець|trainee|intern)\\b");
         if (noExpPattern.matcher(cleanText).find()) {
             return "Без опыта / Минимальный";
         }
 
-        // 3. Запасной план
         if (cleanText.contains("junior")) return "Без опыта / Junior";
 
         return "Не указан";
