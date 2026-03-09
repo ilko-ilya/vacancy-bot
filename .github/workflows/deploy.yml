@@ -29,5 +29,5 @@ jobs:
             cd vacancy-bot
             git pull origin main
             ./mvnw clean package -DskipTests
-            pkill -f "java -jar target/vacancy-bot" || true
+            pkill java || true
             nohup env DB_PASSWORD="$DB_PASSWORD" BOT_TOKEN="$BOT_TOKEN" CHAT_ID="$CHAT_ID" java -jar target/vacancy-bot-0.0.1-SNAPSHOT.jar > bot.log 2>&1 &
