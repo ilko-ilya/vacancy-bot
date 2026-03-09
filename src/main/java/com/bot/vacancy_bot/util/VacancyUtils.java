@@ -14,7 +14,11 @@ public class VacancyUtils {
     private static final Set<String> IGNORE_KEYWORDS = Set.of(
             "senior", "lead", "head", "architect", "principal", "manager",
             "cto", "director", "vp", "fullstack", "full stack", "full-stack",
-            "frontend", "front-end", "android", "ios", "qa", "automation", "test"
+            "frontend", "front-end", "android", "ios", "qa", "automation", "test",
+            "javascript", "java script", "js", "typescript", "type script",
+            "low-code", "low code", "nocode", "no-code", "кібербезпек", "кибербезопасност",
+            "безпек", "security", "sysadmin", "devops", "1c", "1с", "bitrix",
+            "битрикс", "php", "wordpress"
     );
 
     public static boolean shouldIgnore(String titleLower) {

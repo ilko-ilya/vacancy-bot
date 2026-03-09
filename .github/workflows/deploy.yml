@@ -1,0 +1,33 @@
+name: Deploy Bot to GCP
+
+# Запускать скрипт только при пуше в ветку main
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest # GitHub выделяет временный сервер для работы
+
+    steps:
+      - name: Connect to server and run commands
+        uses: appleboy/ssh-action@v1.0.3 # Готовый инструмент для SSH-подключения
+        env:
+          # Достаем твои секреты из "сейфа" GitHub
+          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+          BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
+          CHAT_ID: ${{ secrets.CHAT_ID }}
+        with:
+          # Передаем ключи для входа на твой сервер
+          host: ${{ secrets.SERVER_IP }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          envs: DB_PASSWORD,BOT_TOKEN,CHAT_ID
+          # А вот те самые команды, которые ты вводил руками!
+          script: |
+            cd vacancy-bot
+            git pull origin main
+            ./mvnw clean package -DskipTests
+            pkill -f vacancy-bot || true
+            nohup env DB_PASSWORD="$DB_PASSWORD" BOT_TOKEN="$BOT_TOKEN" CHAT_ID="$CHAT_ID" java -jar target/vacancy-bot-0.0.1-SNAPSHOT.jar > bot.log 2>&1 &
