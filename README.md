@@ -64,15 +64,13 @@ This bot automates the routine of job hunting by providing the following core ca
 New vacancies are processed immediately after discovery and sent to Telegram without delay.
 
 ### 🎯 Smart Filtering
-Filtering by:
-- Tech stack (e.g., Java, Spring)
-- Experience level
-- Location (remote/on-site)
+- **Advanced Experience Filtering:** Smart parsing to exclude Senior (4+ years) roles, including deep DOM parsing for hidden requirements and handling mixed text formats.
+- **Noise Reduction:** Strict keyword blacklist to instantly drop irrelevant matches (e.g., JavaScript, 1C, Cyber Security, DevOps) often returned by inaccurate search engines.
+- **Tech Stack & Location:** Precise filtering by specific Java/Spring requirements and remote/on-site formats.
 
-### 🛡 Duplicate Protection
-- Vacancy history is stored in PostgreSQL
-- Unique constraints prevent duplicate notifications
-- Idempotent message delivery
+### 🛡 Duplicate Protection & Data Management
+- **Zero Spam:** Vacancy history is stored in PostgreSQL with unique constraints to prevent duplicate notifications.
+- **Data Lifecycle Management:** Automated background jobs (Spring Scheduler) clean up vacancies older than 30 days to optimize database storage and server resources.
 
 ### 📩 Instant Telegram Notifications
 
@@ -85,6 +83,12 @@ Filtering by:
 > 📅 **Опубликовано:** 2 March<br>
 > 🔗 **View Source**
 ---
+
+## 🚀 Deployment & CI/CD
+
+The project features a fully automated deployment pipeline:
+- **Hosting:** Deployed on a **Google Cloud Platform (GCP)** virtual machine.
+- **CI/CD Pipeline:** Configured via **GitHub Actions**. Every push to the `main` branch automatically triggers code checkout, Maven build, and zero-downtime deployment to the GCP server via SSH.
 
 ## 🚀 Getting Started
 
@@ -115,7 +119,7 @@ CHAT_ID=your_telegram_chat_id
 Clone the repository and run the application:
 
 ```bash
-git clone [https://github.com/ilko-ilya/vacancy-bot.git](https://github.com/ilko-ilya/vacancy-bot.git)
+git clone https://github.com/ilko-ilya/vacancy-bot.git
 cd vacancy-bot
 
 # Build the project
