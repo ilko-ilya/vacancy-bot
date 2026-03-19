@@ -71,11 +71,10 @@ public class VacancyScheduler {
     public void cleanUpDatabase() {
         log.info("Запуск автоматической очистки старых вакансий...");
 
-        // Вычисляем дату, которая была ровно 1 месяц назад
-        LocalDateTime oneMonthAgo = LocalDateTime.now().minusMonths(1);
+        LocalDateTime cutoffDate = LocalDateTime.now().minusDays(15);
 
         try {
-            int deletedCount = vacancyRepository.deleteOldVacancies(oneMonthAgo);
+            int deletedCount = vacancyRepository.deleteOldVacancies(cutoffDate);
             log.info("Очистка завершена. Удалено старых вакансий: {}", deletedCount);
         } catch (Exception e) {
             log.error("Ошибка при удалении старых вакансий: {}", e.getMessage());
