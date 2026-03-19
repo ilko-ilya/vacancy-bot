@@ -41,13 +41,16 @@ public class VacancyScheduler {
 
                     // 2. Формируем красивое сообщение с HTML-разметкой
                     String message = String.format(
-                            "🔥 <b>Новая вакансия:</b> %s\n" +
-                                    "🏢 <b>Компания:</b> %s\n" +
-                                    "📍 <b>Локация:</b> %s\n" +
-                                    "📍 <b>Уровень:</b> %s\n\n" +
-                                    "⏳ <b>Опыт:</b> %s\n\n" +
-                                    "📅 <b>Опубликовано:</b> %s\n\n" +
-                                    "🔗 <a href='%s'>Посмотреть на %s</a>",
+                            """
+                                    🔥 <b>Новая вакансия:</b> %s
+                                    🏢 <b>Компания:</b> %s
+                                    📍 <b>Локация:</b> %s
+                                    📍 <b>Уровень:</b> %s
+                                    ⏳ <b>Опыт:</b> %s
+                                  
+                                    📅 <b>Опубликовано:</b> %s
+                                    
+                                    🔗 <a href='%s'>Посмотреть на %s</a>""",
                             vacancy.getTitle(),
                             vacancy.getCompany(),
                             (vacancy.getLocation() != null && !vacancy.getLocation().isEmpty()) ? vacancy.getLocation() : "Уточняйте",
