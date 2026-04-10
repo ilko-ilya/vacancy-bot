@@ -13,9 +13,8 @@ class DouParserTest {
     @Test
     void testDouParserFiltersOverqualified() {
         System.out.println("=== СТАРТ ТЕСТА DOU PARSER ===");
-        // Создаем временный пул на 3 потока чисто для теста
-        ExecutorService testExecutor = Executors.newFixedThreadPool(3);
-        DouParser parser = new DouParser(testExecutor);
+
+        DouParser parser = new DouParser();
 
         List<Vacancy> vacancies = parser.parseVacancies();
 
@@ -36,8 +35,6 @@ class DouParserTest {
 
         if (!hasSeniors) System.out.println("✅ DOU чист! Сеньоров нет.");
 
-        // Обязательно закрываем пул потоков, иначе тест "зависнет" в ожидании
-        testExecutor.shutdown();
         System.out.println("====================================\n");
     }
 
@@ -46,11 +43,7 @@ class DouParserTest {
         System.out.println("=== НАЧИНАЕМ ТЕСТ ПАРСЕРА DOU ===");
         long startTime = System.currentTimeMillis();
 
-        // 1. Создаем временный пул потоков специально для теста
-        ExecutorService testExecutor = Executors.newFixedThreadPool(5);
-
-        // 2. Инициализируем парсер вручную (без магии Spring)
-        DouParser douParser = new DouParser(testExecutor);
+        DouParser douParser = new DouParser();
 
         // 3. Запускаем парсинг
         List<Vacancy> vacancies = douParser.parseVacancies();
@@ -70,8 +63,6 @@ class DouParserTest {
             System.out.println("Ссылка:    " + v.getUrl());
         });
 
-        // Закрываем тестовый пул
-        testExecutor.shutdown();
     }
 
 
