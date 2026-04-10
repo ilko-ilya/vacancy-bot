@@ -1,20 +1,23 @@
 package com.bot.vacancy_bot.parser;
 
 import com.bot.vacancy_bot.model.Vacancy;
+import com.bot.vacancy_bot.service.PlaywrightService;
 import com.bot.vacancy_bot.util.VacancyUtils;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
+
+import static org.mockito.Mockito.mock;
 
 class DouParserTest {
+
+    private final PlaywrightService playwrightService = mock(PlaywrightService.class);
 
     @Test
     void testDouParserFiltersOverqualified() {
         System.out.println("=== СТАРТ ТЕСТА DOU PARSER ===");
 
-        DouParser parser = new DouParser();
+        DouParser parser = new DouParser(playwrightService);
 
         List<Vacancy> vacancies = parser.parseVacancies();
 
@@ -43,7 +46,7 @@ class DouParserTest {
         System.out.println("=== НАЧИНАЕМ ТЕСТ ПАРСЕРА DOU ===");
         long startTime = System.currentTimeMillis();
 
-        DouParser douParser = new DouParser();
+        DouParser douParser = new DouParser(playwrightService);
 
         // 3. Запускаем парсинг
         List<Vacancy> vacancies = douParser.parseVacancies();

@@ -1,6 +1,7 @@
 package com.bot.vacancy_bot.parser;
 
 import com.bot.vacancy_bot.model.Vacancy;
+import com.bot.vacancy_bot.service.PlaywrightService;
 import com.bot.vacancy_bot.util.VacancyUtils;
 import lombok.extern.slf4j.Slf4j;
 import org.jsoup.Connection;
@@ -10,7 +11,6 @@ import org.jsoup.nodes.Element;
 import org.jsoup.select.Elements;
 import org.springframework.stereotype.Component;
 
-import java.io.IOException;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -25,10 +25,14 @@ public class DouParser implements VacancyParser {
     private static final String DOU_URL = "https://jobs.dou.ua/vacancies/?category=Java&remote";
     private static final long MAX_EXECUTION_TIME_MS = 5 * 60 * 1000;
 
+    private final PlaywrightService playwrightService;
     private final Map<String, String> sessionCookies = new ConcurrentHashMap<>();
-
-    private long lastRequestTime = 0;
     private final Object rateLimitLock = new Object();
+    private long lastRequestTime = 0;
+
+    public DouParser(PlaywrightService playwrightService) {
+        this.playwrightService = playwrightService;
+    }
 
     @Override
     public List<Vacancy> parseVacancies() {
@@ -37,191 +41,150 @@ public class DouParser implements VacancyParser {
         long startTime = System.currentTimeMillis();
 
         try {
-            log.info("🕵️ DOU: Начинаем парсинг списка вакансий...");
+            log.info("🕵️ DOU: Старт гибридного парсинга...");
             Document doc = fetchDocumentWithRetry(DOU_URL, currentUserAgent);
 
-            if (doc == null) {
-                log.error("❌ DOU: Не удалось получить главную страницу.");
-                return vacancies;
-            }
+            if (doc == null) return vacancies;
 
-            Elements elements = doc.select("li.l-vacancy");
+            // 1. Селектор (ты его уже поменял, он верный)
+            Elements elements = doc.select("div.l-items li.l-vacancy");
 
             if (elements.isEmpty()) {
-                log.warn("⚠️ DOU: Вакансии не найдены! Возможно, изменилась верстка.");
+                log.warn("⚠️ DOU: Список пуст. Возможно, Cloudflare не пробит.");
                 return vacancies;
             }
 
             for (Element element : elements) {
-                if (System.currentTimeMillis() - startTime > MAX_EXECUTION_TIME_MS) {
-                    log.warn("⏱ DOU: Превышено максимальное время парсинга. Останавливаемся.");
-                    break;
-                }
+                // Защита по времени
+                if (System.currentTimeMillis() - startTime > MAX_EXECUTION_TIME_MS) break;
 
-                Element titleElement = element.selectFirst(".title a.vt");
-                if (titleElement == null) continue;
+                Element titleEl = element.selectFirst(".title a.vt");
+                if (titleEl == null) continue;
 
-                String title = titleElement.text();
-                String url = titleElement.attr("href");
+                String title = titleEl.text();
                 String titleLower = title.toLowerCase();
 
+                // 🔥 ВОТ ЭТО МЫ ДОБАВИЛИ: Жесткий фильтр по названию
+                // Если в заголовке нет Java, Spring или JVM - игнорируем (как тот Web developer)
+                if (!titleLower.contains("java") && !titleLower.contains("spring") && !titleLower.contains("jvm")) {
+                    log.debug("🚫 Пропускаем нерелевантный мусор: {}", title);
+                    continue;
+                }
+
+                String url = titleEl.attr("href");
+
+                // Твои стандартные фильтры (ignore list)
                 if (VacancyUtils.shouldIgnore(titleLower)) continue;
-
-                Element dateElement = element.selectFirst(".date");
-                String dateText = dateElement != null ? dateElement.text() : "Недавно";
-
-                if (VacancyUtils.isOldVacancy(dateText)) continue;
-
-                Element companyElement = element.selectFirst("a.company");
-                String company = companyElement != null ? companyElement.text() : "Не указана";
-
-                Element citiesElement = element.selectFirst(".cities");
-                String location = citiesElement != null ? citiesElement.text() : "Уточняйте";
-
-                String role = VacancyUtils.getRole(titleLower);
 
                 simulateHumanBehavior();
 
-                Vacancy vacancy = parseVacancyDetails(title, url, company, location, role, dateText, currentUserAgent);
+                // Переходим к деталям
+                Vacancy vacancy = parseVacancyDetails(title, url, element, currentUserAgent);
                 if (vacancy != null) {
                     vacancies.add(vacancy);
                 }
             }
-
         } catch (Exception e) {
-            log.error("Критическая ошибка парсинга DOU: {}", e.getMessage());
+            log.error("Критическая ошибка DouParser: {}", e.getMessage());
         }
-
         return vacancies;
     }
 
-    private Vacancy parseVacancyDetails(String title, String url, String company,
-                                        String location, String role, String dateText,
-                                        String userAgent) {
+    private Vacancy parseVacancyDetails(String title, String url, Element listElement, String userAgent) {
         String description = "";
-
         try {
             Document doc = fetchDocumentWithRetry(url, userAgent);
-
             if (doc != null) {
-                Element vacancyText = doc.selectFirst(".b-typo");
-                if (vacancyText != null) {
-                    description = vacancyText.text();
-                }
+                Element descEl = doc.selectFirst(".b-typo");
+                if (descEl != null) description = descEl.text();
             }
         } catch (Exception e) {
-            // 🔥 Понизили до DEBUG, чтобы не спамить лог (Замечание #5)
-            log.debug("Ошибка при парсинге деталей [{}]: {}", url, e.getMessage());
+            log.debug("Ошибка деталей [{}]: {}", url, e.getMessage());
         }
 
-        String experience = VacancyUtils.extractExperience(title + " " + description);
+        String exp = VacancyUtils.extractExperience(title + " " + description);
+        if ("OVERQUALIFIED".equals(exp)) return null;
 
-        if ("OVERQUALIFIED".equals(experience)) {
-            return null;
-        }
+        // 🔥 Оптимизация: убрали двойные вызовы selectFirst (Замечание #1)
+        Element compEl = listElement.selectFirst("a.company");
+        Element locEl = listElement.selectFirst(".cities");
+        Element dateEl = listElement.selectFirst(".date");
 
         return Vacancy.builder()
                 .title(title)
-                .company(company)
-                .location(location)
-                .role(role)
-                .experience(experience)
-                .postedDate(dateText)
-                .url(url)
-                .shortDescription(description.length() > 200
-                        ? description.substring(0, 200) + "..."
-                        : description)
-                .siteName(getSiteName())
-                .parsedAt(LocalDateTime.now())
-                .build();
+                .company(compEl != null ? compEl.text() : "Не указана")
+                .location(locEl != null ? locEl.text() : "Уточняйте")
+                .postedDate(dateEl != null ? dateEl.text() : "Недавно")
+                .role(VacancyUtils.getRole(title.toLowerCase()))
+                .experience(exp).url(url).siteName(getSiteName())
+                .shortDescription(description.length() > 200 ? description.substring(0, 200) + "..." : description)
+                .parsedAt(LocalDateTime.now()).build();
     }
 
     private Document fetchDocumentWithRetry(String url, String userAgent) {
         int attempts = 3;
-        int cfAttempts = 0; // 🔥 Ограничитель для Cloudflare (Замечание #2)
-
         for (int i = 1; i <= attempts; i++) {
             enforceGlobalRateLimit();
-
             try {
                 Connection.Response response = Jsoup.connect(url)
                         .userAgent(userAgent)
-                        .header("Accept-Language", "uk-UA,uk;q=0.9,en-US;q=0.8,en;q=0.7")
-                        .header("Connection", "keep-alive")
-                        .cookies(sessionCookies)
-                        .timeout(15000)
-                        .ignoreHttpErrors(true)
-                        .followRedirects(true)
-                        .execute();
+                        .cookies(sessionCookies).timeout(15000)
+                        .ignoreHttpErrors(true).execute();
 
                 sessionCookies.putAll(response.cookies());
-
-                // 🔥 Защита от утечки памяти куки (Замечание #1)
-                if (sessionCookies.size() > 50) {
-                    sessionCookies.clear();
-                    log.debug("♻️ DOU: Cookies очищены (превышен лимит 50)");
-                }
+                if (sessionCookies.size() > 50) sessionCookies.clear();
 
                 int status = response.statusCode();
+                String body = response.body(); // 🔥 Кешируем body (Замечание #3)
 
-                if (status == 429 || status == 403 || status == 503) {
-                    // 🔥 Понизили до DEBUG
-                    log.debug("⚠️ DOU HTTP {}. Rate Limit. Спим 15 сек...", status);
-                    Thread.sleep(15000);
-                    continue;
-                }
+                // Проверяем на блокировку
+                boolean isBlocked = status == 403 || status == 429 || status == 503 ||
+                        body.contains("cf-browser-verification") ||
+                        body.contains("Just a moment");
 
-                if (status >= 400) {
-                    log.debug("❌ Ошибка HTTP {} по адресу {}", status, url);
-                    return null;
-                }
-
-                // 🔥 Быстрая проверка без парсинга DOM (Замечание #3)
-                String body = response.body();
-                if (body.contains("cf-browser-verification") || body.contains("Just a moment")) {
-                    cfAttempts++;
-                    if (cfAttempts >= 2) {
-                        log.warn("🛡️ Cloudflare не пускает (сдаемся после {} попыток) для {}", cfAttempts, url);
-                        return null; // 🔥 Не сливаем ресурсы, если защита непробиваема (Замечание #2)
+                if (isBlocked) {
+                    log.debug("🛡 Jsoup встретил преграду (Attempt {}/{}).", i, attempts);
+                    // 🔥 Fallback только на последней попытке (Замечание #2)
+                    if (i == attempts) {
+                        log.warn("🛡 Jsoup не справился. Переход на Playwright для {}", url);
+                        return fetchWithPlaywright(url, userAgent);
                     }
-                    log.debug("🛡️ Cloudflare JS Challenge обнаружен! Отступаем на 15 сек...");
-                    Thread.sleep(15000);
+                    // Если не последняя попытка — просто ждем и пробуем Jsoup снова
+                    Thread.sleep(3000L * i);
                     continue;
                 }
 
-                return response.parse(); // Парсим DOM ТОЛЬКО если уверены, что это не заглушка
-
-            } catch (IOException e) {
-                log.debug("DOU: Попытка {} не удалась [{}]: {}", i, url, e.getMessage());
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                return null;
-            }
-
-            try {
-                long delay = (2000L * i) + ThreadLocalRandom.current().nextInt(1000);
-                Thread.sleep(delay);
-            } catch (InterruptedException ignored) {
-                Thread.currentThread().interrupt();
+                return response.parse();
+            } catch (Exception e) {
+                log.debug("Jsoup attempt {} failed", i);
             }
         }
         return null;
     }
 
+    private Document fetchWithPlaywright(String url, String userAgent) {
+        String html = playwrightService.fetchPage(url, userAgent);
+        if (html == null) return null;
+
+        Document doc = Jsoup.parse(html);
+        // 🔥 Усиленная проверка результата (Замечание #5)
+        boolean hasData = url.contains("vacancies/?")
+                ? doc.selectFirst("li.l-vacancy") != null
+                : doc.selectFirst(".b-typo") != null;
+
+        if (!hasData || doc.title().contains("Just a moment")) {
+            log.error("🛡️ Playwright Fallback failed for {}", url);
+            return null;
+        }
+        return doc;
+    }
+
     private void enforceGlobalRateLimit() {
         synchronized (rateLimitLock) {
             long now = System.currentTimeMillis();
-            long diff = now - lastRequestTime;
-
-            // 🔥 "Плавающий" Rate Limit от 1.2 до 2.0 секунд (Замечание #4)
             long minDelay = 1200 + ThreadLocalRandom.current().nextInt(800);
-
-            if (diff < minDelay) {
-                try {
-                    Thread.sleep(minDelay - diff);
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                }
+            if (now - lastRequestTime < minDelay) {
+                try { Thread.sleep(minDelay - (now - lastRequestTime)); } catch (Exception ignored) {}
             }
             lastRequestTime = System.currentTimeMillis();
         }
@@ -235,24 +198,19 @@ public class DouParser implements VacancyParser {
                 case 2, 3, 4, 5 -> 1000 + ThreadLocalRandom.current().nextInt(1000);
                 default -> 500 + ThreadLocalRandom.current().nextInt(500);
             };
-
             Thread.sleep(delay);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-        }
+        } catch (Exception ignored) {}
     }
 
     private String getRandomUserAgent() {
         List<String> agents = List.of(
                 "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
-                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
-                "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36"
+                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
         );
+        // 🔥 Динамический размер списка (Замечание #6)
         return agents.get(ThreadLocalRandom.current().nextInt(agents.size()));
     }
 
     @Override
-    public String getSiteName() {
-        return "DOU";
-    }
+    public String getSiteName() { return "DOU"; }
 }
