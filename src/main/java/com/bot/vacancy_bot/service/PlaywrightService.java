@@ -61,28 +61,34 @@ public class PlaywrightService {
     private String doFetch(String url, String userAgent) {
         try (BrowserContext context = browser.newContext(new Browser.NewContextOptions()
                 .setUserAgent(userAgent)
-                .setViewportSize(1280, 720))) { // Уменьшили экран для экономии памяти
+                .setViewportSize(1280, 720))) {
 
             Page page = context.newPage();
-
-            // 🔥 МАГИЯ: Блокируем всё лишнее (картинки, стили, шрифты)
+            // Наша фишка для экономии памяти сервера:
             page.route("**/*.{png,jpg,jpeg,svg,css,woff,woff2,pdf,zip}", Route::abort);
 
-            // Даем 60 секунд на "прогрызание" через Cloudflare
             page.navigate(url, new Page.NavigateOptions().setTimeout(60000));
 
             String selector = url.contains("vacancies") ? "li.l-vacancy" : "body";
+
             try {
-                // Увеличиваем ожидание контента до 60 сек
-                page.waitForSelector(selector, new Page.WaitForSelectorOptions().setTimeout(60000));
+                // Ждем вакансии 40 секунд
+                page.waitForSelector(selector, new Page.WaitForSelectorOptions().setTimeout(40000));
             } catch (Exception e) {
-                log.warn("⏱ Не дождались вакансий, забираем что прогрузилось");
+                log.warn("⏱ Вакансии не появились сразу. Проверяем наличие защиты...");
             }
 
-            if (page.title().contains("Just a moment")) {
-                log.info("🛡 Замечен Cloudflare, ждем еще 30 сек...");
-                page.waitForCondition(() -> !page.title().contains("Just a moment"),
-                        new Page.WaitForConditionOptions().setTimeout(30000));
+            try {
+                // Если мы видим экран Cloudflare
+                if (page.title().contains("Just a moment") || page.title().contains("Cloudflare")) {
+                    log.info("🛡 Cloudflare думает... Ждем, пока он нас пропустит.");
+                    // Пытаемся дождаться селектора еще раз (если Cloudflare сделает редирект)
+                    page.waitForSelector(selector, new Page.WaitForSelectorOptions().setTimeout(20000));
+                }
+            } catch (Exception e) {
+                // Та самая ошибка "context destroyed". Значит Cloudflare нас перенаправил!
+                log.info("🔄 Зафиксирован редирект от Cloudflare! Ждем отрисовку страницы...");
+                page.waitForTimeout(5000); // Даем 5 секунд, чтобы DOM-дерево с вакансиями построилось
             }
 
             return page.content();
