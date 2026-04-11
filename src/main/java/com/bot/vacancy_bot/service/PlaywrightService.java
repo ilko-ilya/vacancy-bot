@@ -22,7 +22,12 @@ public class PlaywrightService {
         this.playwright = Playwright.create();
         this.browser = playwright.chromium().launch(new BrowserType.LaunchOptions()
                 .setHeadless(true)
-                .setArgs(List.of("--disable-blink-features=AutomationControlled")));
+                .setArgs(List.of(
+                "--disable-blink-features=AutomationControlled",
+                "--no-sandbox",                  // Обязательно для серверов Linux
+                "--disable-setuid-sandbox",      // Обязательно для серверов Linux
+                "--disable-dev-shm-usage"        // Спасает от падений при нехватке памяти
+        )));
     }
 
     @PreDestroy
