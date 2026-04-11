@@ -61,22 +61,24 @@ public class PlaywrightService {
     private String doFetch(String url, String userAgent) {
         try (BrowserContext context = browser.newContext(new Browser.NewContextOptions()
                 .setUserAgent(userAgent)
-                .setViewportSize(1920, 1080))) {
+                .setViewportSize(1280, 720))) { // Уменьшили экран для экономии памяти
 
             Page page = context.newPage();
-            // Даем 60 секунд на загрузку (вместо 20)
+
+            // 🔥 МАГИЯ: Блокируем всё лишнее (картинки, стили, шрифты)
+            page.route("**/*.{png,jpg,jpeg,svg,css,woff,woff2,pdf,zip}", Route::abort);
+
+            // Даем 60 секунд на "прогрызание" через Cloudflare
             page.navigate(url, new Page.NavigateOptions().setTimeout(60000));
 
-            // Ждем не просто body, а именно вакансии (так надежнее)
-            // Если это главная страница DOU — ищем карточки
             String selector = url.contains("vacancies") ? "li.l-vacancy" : "body";
             try {
-                page.waitForSelector(selector, new Page.WaitForSelectorOptions().setTimeout(30000));
+                // Увеличиваем ожидание контента до 60 сек
+                page.waitForSelector(selector, new Page.WaitForSelectorOptions().setTimeout(60000));
             } catch (Exception e) {
-                log.warn("⏱ Не дождались селектора {}, пробуем забрать что есть", selector);
+                log.warn("⏱ Не дождались вакансий, забираем что прогрузилось");
             }
 
-            // Если Cloudflare всё еще висит
             if (page.title().contains("Just a moment")) {
                 log.info("🛡 Замечен Cloudflare, ждем еще 30 сек...");
                 page.waitForCondition(() -> !page.title().contains("Just a moment"),
