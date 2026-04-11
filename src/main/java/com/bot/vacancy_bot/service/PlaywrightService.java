@@ -51,7 +51,7 @@ public class PlaywrightService {
                 try {
                     return doFetch(url, userAgent);
                 } catch (Exception e) {
-                    log.debug("⚠️ Playwright retry {}: {}", i, e.getMessage());
+                    log.warn("⚠️ Playwright попытка {} не удалась: {}", i, e.getMessage());
                 }
             }
             return null;

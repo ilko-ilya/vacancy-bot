@@ -164,7 +164,10 @@ public class DouParser implements VacancyParser {
 
     private Document fetchWithPlaywright(String url, String userAgent) {
         String html = playwrightService.fetchPage(url, userAgent);
-        if (html == null) return null;
+        if (html == null) {
+            log.warn("❌ Playwright вернул пустой HTML для {}", url);
+            return null;
+        }
 
         Document doc = Jsoup.parse(html);
         // 🔥 Усиленная проверка результата (Замечание #5)
