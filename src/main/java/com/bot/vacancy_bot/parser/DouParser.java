@@ -31,7 +31,11 @@ public class DouParser implements VacancyParser {
 
         try {
             // Подключаемся и парсим страницу именно как XML
+            // Подключаемся, маскируясь под обычный браузер
             Document doc = Jsoup.connect(DOU_RSS_URL)
+                    .userAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
+                    .header("Accept", "application/rss+xml, application/xml, text/xml, */*")
+                    .header("Accept-Language", "uk-UA,uk;q=0.9,en-US;q=0.8,en;q=0.7")
                     .parser(Parser.xmlParser())
                     .timeout(15000)
                     .get();
