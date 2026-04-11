@@ -70,7 +70,7 @@ public class RobotaUaParser implements VacancyParser {
                                 })
                 )
                 .bodyToMono(String.class)
-                .timeout(Duration.ofSeconds(30))
+                .timeout(Duration.ofSeconds(60))
                 .doOnError(e -> log.error("Ошибка HTTP запроса", e))
                 .block(); // ✅ допустимо — boundary
     }

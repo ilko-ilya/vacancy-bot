@@ -43,7 +43,7 @@ public class PlaywrightService {
 
             for (int i = 1; i <= attempts; i++) {
                 // Safeguard: если весь цикл Playwright затянулся больше чем на 1.5 минуты
-                if (System.currentTimeMillis() - globalStart > 90000) {
+                if (System.currentTimeMillis() - globalStart > 180000) {
                     log.warn("⏱ Playwright: Превышен глобальный лимит времени на запрос");
                     return null;
                 }
@@ -64,14 +64,23 @@ public class PlaywrightService {
                 .setViewportSize(1920, 1080))) {
 
             Page page = context.newPage();
-            // Уменьшили таймаут до 20 сек (Замечание #4)
-            page.navigate(url, new Page.NavigateOptions().setTimeout(20000));
+            // Даем 60 секунд на загрузку (вместо 20)
+            page.navigate(url, new Page.NavigateOptions().setTimeout(60000));
 
-            page.waitForSelector("body", new Page.WaitForSelectorOptions().setTimeout(10000));
+            // Ждем не просто body, а именно вакансии (так надежнее)
+            // Если это главная страница DOU — ищем карточки
+            String selector = url.contains("vacancies") ? "li.l-vacancy" : "body";
+            try {
+                page.waitForSelector(selector, new Page.WaitForSelectorOptions().setTimeout(30000));
+            } catch (Exception e) {
+                log.warn("⏱ Не дождались селектора {}, пробуем забрать что есть", selector);
+            }
 
+            // Если Cloudflare всё еще висит
             if (page.title().contains("Just a moment")) {
+                log.info("🛡 Замечен Cloudflare, ждем еще 30 сек...");
                 page.waitForCondition(() -> !page.title().contains("Just a moment"),
-                        new Page.WaitForConditionOptions().setTimeout(15000));
+                        new Page.WaitForConditionOptions().setTimeout(30000));
             }
 
             return page.content();
