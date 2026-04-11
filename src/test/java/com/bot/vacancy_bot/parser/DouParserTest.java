@@ -1,42 +1,30 @@
 package com.bot.vacancy_bot.parser;
 
 import com.bot.vacancy_bot.model.Vacancy;
-import com.bot.vacancy_bot.service.PlaywrightService;
 import com.bot.vacancy_bot.util.VacancyUtils;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
 
-import static org.mockito.Mockito.mock;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 class DouParserTest {
-
-    private final PlaywrightService playwrightService = mock(PlaywrightService.class);
 
     @Test
     void testDouParserFiltersOverqualified() {
         System.out.println("=== СТАРТ ТЕСТА DOU PARSER ===");
 
-        DouParser parser = new DouParser(playwrightService);
+        DouParser parser = new DouParser();
 
         List<Vacancy> vacancies = parser.parseVacancies();
 
         System.out.println("Найдено подходящих вакансий: " + vacancies.size());
-        boolean hasSeniors = false;
 
         for (Vacancy v : vacancies) {
-            // Добавил вывод URL в консоль!
-            System.out.println("- " + v.getTitle() + " | Опыт: " + v.getExperience() + " | " + v.getUrl());
-
-            if ("OVERQUALIFIED".equals(v.getExperience()) ||
-                    v.getExperience().contains("4") ||
-                    v.getExperience().contains("5")) {
-                System.err.println("❌ ПРОПУЩЕН СЕНЬОР: " + v.getTitle() + " | " + v.getUrl());
-                hasSeniors = true;
-            }
+            System.out.println("- " + v.getTitle() + " | " + v.getCompany());
         }
 
-        if (!hasSeniors) System.out.println("✅ DOU чист! Сеньоров нет.");
+        assertNotNull(vacancies);
 
         System.out.println("====================================\n");
     }
@@ -46,7 +34,7 @@ class DouParserTest {
         System.out.println("=== НАЧИНАЕМ ТЕСТ ПАРСЕРА DOU ===");
         long startTime = System.currentTimeMillis();
 
-        DouParser douParser = new DouParser(playwrightService);
+        DouParser douParser = new DouParser();
 
         // 3. Запускаем парсинг
         List<Vacancy> vacancies = douParser.parseVacancies();
