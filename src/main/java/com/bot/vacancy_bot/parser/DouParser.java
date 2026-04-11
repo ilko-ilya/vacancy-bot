@@ -2,7 +2,6 @@ package com.bot.vacancy_bot.parser;
 
 import com.bot.vacancy_bot.model.Vacancy;
 import com.bot.vacancy_bot.util.VacancyUtils;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
@@ -17,40 +16,39 @@ import java.util.List;
 
 @Slf4j
 @Component
-@RequiredArgsConstructor
 public class DouParser implements VacancyParser {
 
-    // URL RSS-ленты DOU (чистый XML, без Cloudflare)
-    private static final String DOU_RSS_URL = """
-            https://jobs.dou.ua/vacancies/feeds/?category=Java""";
+    private static final String SCRAPER_API_KEY = "181616405e1092802cc9af41bbb775e1";
+
+    // Ссылка на чистый XML фид DOU
+    private static final String TARGET_URL = "https://jobs.dou.ua/vacancies/feeds/?category=Java";
 
     @Override
     public List<Vacancy> parseVacancies() {
         List<Vacancy> vacancies = new ArrayList<>();
-        log.info("⚡ DOU: Старт быстрого парсинга через RSS...");
+        log.info("⚡ DOU: Старт парсинга RSS через ScraperAPI...");
+
+        // Формируем хитрую ссылку для прокси
+        String proxyUrl = "http://api.scraperapi.com/?api_key=" + SCRAPER_API_KEY + "&url=" + TARGET_URL;
 
         try {
-            // Подключаемся и парсим страницу именно как XML
-            // Подключаемся, маскируясь под обычный браузер
-            Document doc = Jsoup.connect(DOU_RSS_URL)
-                    .userAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
-                    .header("Accept", "application/rss+xml, application/xml, text/xml, */*")
-                    .header("Accept-Language", "uk-UA,uk;q=0.9,en-US;q=0.8,en;q=0.7")
-                    .parser(Parser.xmlParser())
-                    .timeout(15000)
+            // Подключаемся к прокси и ждем (ScraperAPI может думать до 60 сек)
+            Document doc = Jsoup.connect(proxyUrl)
+                    .timeout(60000)
+                    .parser(Parser.xmlParser()) // Обязательно парсим как XML
                     .get();
 
             Elements items = doc.select("item");
 
             if (items.isEmpty()) {
-                log.warn("⚠️ DOU: RSS-лента пуста. Возможно, изменился формат.");
+                log.warn("⚠️ DOU: RSS-лента пуста или ScraperAPI вернул пустой ответ.");
                 return vacancies;
             }
 
             for (Element item : items) {
                 String title = item.select("title").text();
                 String link = item.select("link").text();
-                String description = item.select("description").text(); // В RSS тут лежит HTML-описание
+                String description = item.select("description").text();
                 String pubDate = item.select("pubDate").text();
 
                 String titleLower = title.toLowerCase();
@@ -60,7 +58,7 @@ public class DouParser implements VacancyParser {
                     continue;
                 }
 
-                // Игнор-лист
+                // Игнор-лист из твоего утилитного класса
                 if (VacancyUtils.shouldIgnore(titleLower)) continue;
 
                 // Извлекаем опыт
@@ -89,16 +87,16 @@ public class DouParser implements VacancyParser {
                 vacancies.add(vacancy);
             }
 
-            log.info("✅ DOU: Успешно получено {} вакансий из RSS", vacancies.size());
+            log.info("✅ DOU: Успешно получено {} вакансий через ScraperAPI", vacancies.size());
 
         } catch (Exception e) {
-            log.error("❌ Критическая ошибка DouParser (RSS): {}", e.getMessage());
+            log.error("❌ Критическая ошибка DouParser (ScraperAPI): {}", e.getMessage());
         }
 
         return vacancies;
     }
 
-    // Хелпер для извлечения названия компании из заголовка (например, "Java Developer в DataArt")
+    // Хелпер для извлечения названия компании из заголовка
     private String extractCompanyFromTitle(String title) {
         if (title.contains(" в ")) {
             return title.substring(title.lastIndexOf(" в ") + 3).trim();

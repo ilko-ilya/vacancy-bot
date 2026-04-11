@@ -31,32 +31,20 @@ class DouParserTest {
 
     @Test
     void testParseVacancies() {
-        System.out.println("=== НАЧИНАЕМ ТЕСТ ПАРСЕРА DOU ===");
-        long startTime = System.currentTimeMillis();
+        System.out.println("=== СТАРТ ТЕСТА DOU PARSER (ScraperAPI) ===");
 
-        DouParser douParser = new DouParser();
+        // Создаем парсер (он сам возьмет ключ из кода)
+        DouParser parser = new DouParser();
 
-        // 3. Запускаем парсинг
-        List<Vacancy> vacancies = douParser.parseVacancies();
+        List<Vacancy> vacancies = parser.parseVacancies();
 
-        long endTime = System.currentTimeMillis();
-
-        System.out.println("=== РЕЗУЛЬТАТЫ ===");
         System.out.println("Найдено вакансий: " + vacancies.size());
-        System.out.println("Время выполнения: " + (endTime - startTime) + " мс");
+        for (Vacancy v : vacancies) {
+            System.out.println("- " + v.getTitle() + " | " + v.getCompany());
+        }
 
-        // 4. Выводим результаты
-        vacancies.stream().limit(5).forEach(v -> {
-            System.out.println("--------------------------------------------------");
-            System.out.println("Должность: " + v.getTitle());
-            System.out.println("Компания:  " + v.getCompany());
-            System.out.println("Опыт:      " + v.getExperience());
-            System.out.println("Ссылка:    " + v.getUrl());
-        });
-
+        assertNotNull(vacancies);
     }
-
-
 
     @Test
     void testExtractExperienceLogic() {
