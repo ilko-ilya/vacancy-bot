@@ -82,13 +82,18 @@ public class PlaywrightService {
                 // Если мы видим экран Cloudflare
                 if (page.title().contains("Just a moment") || page.title().contains("Cloudflare")) {
                     log.info("🛡 Cloudflare думает... Ждем, пока он нас пропустит.");
-                    // Пытаемся дождаться селектора еще раз (если Cloudflare сделает редирект)
                     page.waitForSelector(selector, new Page.WaitForSelectorOptions().setTimeout(20000));
                 }
             } catch (Exception e) {
                 // Та самая ошибка "context destroyed". Значит Cloudflare нас перенаправил!
                 log.info("🔄 Зафиксирован редирект от Cloudflare! Ждем отрисовку страницы...");
-                page.waitForTimeout(5000); // Даем 5 секунд, чтобы DOM-дерево с вакансиями построилось
+                try {
+                    // 🔥 Умное ожидание: ждем именно появления вакансий на новой странице (даем 20 секунд)
+                    page.waitForSelector(selector, new Page.WaitForSelectorOptions().setTimeout(20000));
+                    log.info("✅ Страница отрисовалась успешно!");
+                } catch (Exception ex) {
+                    log.warn("⚠️ Вакансии не появились после редиректа. Заголовок страницы: {}", page.title());
+                }
             }
 
             return page.content();
