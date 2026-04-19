@@ -3,6 +3,8 @@ spring:
     url: jdbc:postgresql://localhost:5432/vacancydb
     username: bot_user
     password: ${DB_PASSWORD}
+  config:
+    import: optional:file:.env
   jpa:
     database-platform: org.hibernate.dialect.PostgreSQLDialect
     hibernate:
@@ -13,4 +15,8 @@ telegram:
     username: my_java_jobs_bot
     token: ${BOT_TOKEN}
     chat-id: ${CHAT_ID}
+
+scraper:
+  api:
+    key: ${SCRAPER_API_KEY}
 

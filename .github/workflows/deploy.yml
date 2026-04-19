@@ -1,6 +1,5 @@
 name: Deploy Bot to GCP
 
-# Запускать скрипт только при пуше в ветку main
 on:
   push:
     branches:
@@ -8,26 +7,25 @@ on:
 
 jobs:
   deploy:
-    runs-on: ubuntu-latest # GitHub выделяет временный сервер для работы
+    runs-on: ubuntu-latest
 
     steps:
       - name: Connect to server and run commands
-        uses: appleboy/ssh-action@v1.0.3 # Готовый инструмент для SSH-подключения
+        uses: appleboy/ssh-action@v1.0.3
         env:
-          # Достаем твои секреты из "сейфа" GitHub
           DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
           BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
           CHAT_ID: ${{ secrets.CHAT_ID }}
+          SCRAPER_API_KEY: ${{ secrets.SCRAPER_API_KEY }} # <-- НОВОЕ
         with:
-          # Передаем ключи для входа на твой сервер
           host: ${{ secrets.SERVER_IP }}
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
-          envs: DB_PASSWORD,BOT_TOKEN,CHAT_ID
-          # А вот те самые команды, которые ты вводил руками!
+          envs: DB_PASSWORD,BOT_TOKEN,CHAT_ID,SCRAPER_API_KEY # <-- НОВОЕ (добавил через запятую без пробелов)
           script: |
             cd vacancy-bot
             git pull origin main
             ./mvnw clean package -DskipTests
             pkill java || true
-            nohup env DB_PASSWORD="$DB_PASSWORD" BOT_TOKEN="$BOT_TOKEN" CHAT_ID="$CHAT_ID" java -jar target/vacancy-bot-0.0.1-SNAPSHOT.jar > bot.log 2>&1 &
+            # <-- НОВОЕ: добавил SCRAPER_API_KEY в команду nohup
+            nohup env DB_PASSWORD="$DB_PASSWORD" BOT_TOKEN="$BOT_TOKEN" CHAT_ID="$CHAT_ID" SCRAPER_API_KEY="$SCRAPER_API_KEY" java -jar target/vacancy-bot-0.0.1-SNAPSHOT.jar > bot.log 2>&1 &

@@ -1,76 +1,115 @@
 package com.bot.vacancy_bot.parser;
 
 import com.bot.vacancy_bot.model.Vacancy;
+import com.bot.vacancy_bot.service.ScraperApiClient;
 import com.bot.vacancy_bot.util.VacancyUtils;
+import org.jsoup.Jsoup;
+import org.jsoup.nodes.Document;
+import org.jsoup.parser.Parser;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.List;
 
-import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.when;
 
+@ExtendWith(MockitoExtension.class)
 class DouParserTest {
 
+    @Mock
+    private ScraperApiClient scraperApiClient; // Подменяем реальный клиент заглушкой
+
+    @InjectMocks
+    private DouParser douParser; // Спринг сам подставит заглушку в конструктор парсера
+
     @Test
-    void testDouParserFiltersOverqualified() {
-        System.out.println("=== СТАРТ ТЕСТА DOU PARSER ===");
+    void testParseVacanciesMocked() {
+        System.out.println("=== СТАРТ ТЕСТА DOU PARSER (С Mockito) ===");
 
-        DouParser parser = new DouParser();
+        // 1. Подготавливаем фейковый XML ответ, как будто он пришел от DOU
+        String mockXml = """
+                <rss>
+                    <channel>
+                        <item>
+                            <title>Middle Java Developer в CoolCompany</title>
+                            <link>https://jobs.dou.ua/123</link>
+                            <description>Шукаємо розробника з досвідом від 2 років.</description>
+                            <pubDate>Thu, 19 Apr 2026 12:00:00 +0300</pubDate>
+                        </item>
+                        <item>
+                            <title>Senior Java Developer (Overqualified)</title>
+                            <link>https://jobs.dou.ua/456</link>
+                            <description>Вимоги: 5+ років досвіду.</description>
+                            <pubDate>Thu, 19 Apr 2026 10:00:00 +0300</pubDate>
+                        </item>
+                        <item>
+                            <title>Python Developer (Мусор)</title>
+                            <link>https://jobs.dou.ua/789</link>
+                            <description>Тут немає джави.</description>
+                            <pubDate>Thu, 19 Apr 2026 09:00:00 +0300</pubDate>
+                        </item>
+                    </channel>
+                </rss>
+                """;
 
-        List<Vacancy> vacancies = parser.parseVacancies();
+        Document mockDoc = Jsoup.parse(mockXml, "", Parser.xmlParser());
 
-        System.out.println("Найдено подходящих вакансий: " + vacancies.size());
+        // 2. Учим нашу заглушку возвращать этот XML при любом вызове
+        when(scraperApiClient.fetchXmlDocument(anyString())).thenReturn(mockDoc);
 
+        // 3. Вызываем метод парсинга
+        List<Vacancy> vacancies = douParser.parseVacancies();
+
+        System.out.println("Найдено вакансий после фильтрации: " + vacancies.size());
         for (Vacancy v : vacancies) {
             System.out.println("- " + v.getTitle() + " | " + v.getCompany());
         }
 
+        // 4. Проверяем, что логика фильтрации отработала верно
         assertNotNull(vacancies);
+        assertEquals(1, vacancies.size(), "Должна остаться только 1 подходящая вакансия");
+        assertEquals("Middle Java Developer в CoolCompany", vacancies.get(0).getTitle());
+        assertEquals("CoolCompany", vacancies.get(0).getCompany());
 
         System.out.println("====================================\n");
-    }
-
-    @Test
-    void testParseVacancies() {
-        System.out.println("=== СТАРТ ТЕСТА DOU PARSER (ScraperAPI) ===");
-
-        // Создаем парсер (он сам возьмет ключ из кода)
-        DouParser parser = new DouParser();
-
-        List<Vacancy> vacancies = parser.parseVacancies();
-
-        System.out.println("Найдено вакансий: " + vacancies.size());
-        for (Vacancy v : vacancies) {
-            System.out.println("- " + v.getTitle() + " | " + v.getCompany());
-        }
-
-        assertNotNull(vacancies);
     }
 
     @Test
     void testExtractExperienceLogic() {
         System.out.println("=== СТАРТ ТЕСТА УМНОГО ФИЛЬТРА ОПЫТА ===");
 
-        // 1. Идеальный кандидат (ровно 2 года)
+        // Для статических утилит Mockito не нужен, тестируем напрямую
+
         String text1 = "Шукаємо розробника. Вимоги: від 2 років досвіду з Java.";
-        System.out.println("Тест 1 (2 года): " + VacancyUtils.extractExperience(text1));
+        String exp1 = VacancyUtils.extractExperience(text1);
+        System.out.println("Тест 1 (2 года): " + exp1);
+        assertNotEquals("OVERQUALIFIED", exp1);
 
-        // 2. Слишком опытный (сеньор, 5 лет)
         String text2 = "Looking for a developer with 5+ years of experience in Spring.";
-        System.out.println("Тест 2 (5+ лет): " + VacancyUtils.extractExperience(text2));
+        String exp2 = VacancyUtils.extractExperience(text2);
+        System.out.println("Тест 2 (5+ лет): " + exp2);
+        assertEquals("OVERQUALIFIED", exp2);
 
-        // 3. Стажер (без цифр, но с ключевыми словами)
         String text3 = "Відкрита позиція Trainee Java Developer. Без комерційного досвіду.";
-        System.out.println("Тест 3 (Trainee): " + VacancyUtils.extractExperience(text3));
+        String exp3 = VacancyUtils.extractExperience(text3);
+        System.out.println("Тест 3 (Trainee): " + exp3);
+        assertNotEquals("OVERQUALIFIED", exp3);
 
-        // 4. Пограничный случай (ровно 3 года - должно пройти!)
         String text4 = "Required: 3 years of commercial experience";
-        System.out.println("Тест 4 (3 года): " + VacancyUtils.extractExperience(text4));
+        String exp4 = VacancyUtils.extractExperience(text4);
+        System.out.println("Тест 4 (3 года): " + exp4);
+        assertNotEquals("OVERQUALIFIED", exp4);
 
-        // 5. Опасный ложный стажер (как было с Intelliarts: 4 года опыта, но есть слово intern)
         String text5 = "4+ years of experience. You will mentor interns and juniors.";
-        System.out.println("Тест 5 (4 года + intern): " + VacancyUtils.extractExperience(text5));
+        String exp5 = VacancyUtils.extractExperience(text5);
+        System.out.println("Тест 5 (4 года + intern): " + exp5);
+        assertEquals("OVERQUALIFIED", exp5); // Тут зависит от того, как именно настроен твой фильтр
 
         System.out.println("========================================");
     }
-
 }
