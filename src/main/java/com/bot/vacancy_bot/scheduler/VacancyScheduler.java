@@ -106,9 +106,9 @@ public class VacancyScheduler {
         }
     }
 
-    @EventListener(ApplicationReadyEvent.class)
-    public void testRunOnStartup() {
-        log.info("🛠️ ТЕСТ: Принудительный запуск парсеров сразу после старта приложения...");
-        performSearch();
-    }
+//    @EventListener(ApplicationReadyEvent.class)
+//    public void testRunOnStartup() {
+//        log.info("🛠️ ТЕСТ: Принудительный запуск парсеров сразу после старта приложения...");
+//        performSearch();
+//    }
 }
