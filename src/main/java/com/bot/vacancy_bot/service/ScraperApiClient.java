@@ -25,7 +25,7 @@ public class ScraperApiClient {
             try {
                 log.info("🌐 [ScraperAPI] Попытка {}/2 (cheap). URL: {}", i, targetUrl);
                 doc = Jsoup.connect(buildProxyUrl(targetUrl, false))
-                        .timeout(10000) // Уменьшили таймаут до 10 сек
+                        .timeout(60000) // Уменьшили таймаут до 10 сек
                         .parser(Parser.xmlParser())
                         .get();
 
