@@ -27,27 +27,14 @@ public class VacancyScheduler {
     @Value("${telegram.bot.chat-id}")
     private long chatId;
 
-    // --- ГРАФИК 1: БУДНИ (Пн-Пт) Спокойный режим (раз в час) ---
-    // Часы: 7, 8, 9 утра И 19, 20, 21, 22 вечера
-    @Scheduled(cron = "0 0 7-9,19-22 * * MON-FRI")
-    public void weekdayHourlySearch() {
-        log.info("⏰ [Будни: Утро/Вечер] Запуск поиска вакансий...");
-        performSearch();
-    }
-
-    // --- ГРАФИК 2: БУДНИ (Пн-Пт) Интенсивный режим (раз в 30 минут) ---
-    // Часы: с 10:00 до 18:30 включительно
-    @Scheduled(cron = "0 0,30 10-18 * * MON-FRI")
-    public void weekdayIntensiveSearch() {
-        log.info("🚀 [Будни: День] Запуск интенсивного поиска...");
-        performSearch();
-    }
-
-    // --- ГРАФИК 3: СУББОТА (раз в час) ---
-    // Часы: с 9:00 до 20:00 включительно
-    @Scheduled(cron = "0 0 9-20 * * SAT")
-    public void saturdaySearch() {
-        log.info("🛋️ [Суббота] Запуск поиска выходного дня...");
+    /**
+     * Единый график поиска для экономии API кредитов.
+     * Запуски: 11:00, 14:00, 17:00
+     * Дни: Понедельник-Пятница + Воскресенье (Суббота исключена)
+     */
+    @Scheduled(cron = "0 0 11,14,17 * * MON-FRI,SUN")
+    public void scheduledSearch() {
+        log.info("🎯 [Запуск по расписанию] Проверка новых вакансий (Пн-Пт, Вс)...");
         performSearch();
     }
 
@@ -77,7 +64,7 @@ public class VacancyScheduler {
                         📍 <b>Локация:</b> %s
                         📍 <b>Уровень:</b> %s
                         ⏳ <b>Опыт:</b> %s
-                      
+                        
                         📅 <b>Опубликовано:</b> %s
                         
                         🔗 <a href='%s'>Посмотреть на %s</a>""",
@@ -105,10 +92,9 @@ public class VacancyScheduler {
             log.error("Ошибка при удалении старых вакансий: {}", e.getMessage());
         }
     }
-
+}
 //    @EventListener(ApplicationReadyEvent.class)
 //    public void testRunOnStartup() {
 //        log.info("🛠️ ТЕСТ: Принудительный запуск парсеров сразу после старта приложения...");
 //        performSearch();
 //    }
-}
