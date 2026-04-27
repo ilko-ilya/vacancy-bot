@@ -27,6 +27,11 @@ public class DouParser implements VacancyParser {
     private final ScraperApiClient scraperClient;
 
     @Override
+    public boolean isHeavy() {
+        return true;
+    }
+
+    @Override
     public List<Vacancy> parseVacancies() {
         List<Vacancy> vacancies = new ArrayList<>();
         log.info("⚡ DOU: Старт парсинга...");

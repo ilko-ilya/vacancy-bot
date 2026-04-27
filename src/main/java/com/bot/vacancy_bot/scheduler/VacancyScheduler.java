@@ -28,31 +28,43 @@ public class VacancyScheduler {
     private long chatId;
 
     /**
-     * Единый график поиска для экономии API кредитов.
-     * Запуски: 11:00, 14:00, 17:00
-     * Дни: Понедельник-Пятница + Воскресенье (Суббота исключена)
+     * МЕДЛЕННЫЙ ПОТОК (Только для тяжелых парсеров, например DOU)
+     * Запуски: 11:00, 14:00, 17:00 строго с понедельника по пятницу.
      */
-    @Scheduled(cron = "0 0 11,14,17 * * MON-FRI,SUN")
-    public void scheduledSearch() {
-        log.info("🎯 [Запуск по расписанию] Проверка новых вакансий (Пн-Пт, Вс)...");
-        performSearch();
+    @Scheduled(cron = "0 0 11,14,17 * * MON-FRI")
+    public void scheduledHeavySearch() {
+        log.info("🐢 [ScraperAPI] Запуск тяжелого парсинга по расписанию...");
+
+        parsers.stream()
+                .filter(VacancyParser::isHeavy)
+                .forEach(this::executeParser);
     }
 
-    // Общая логика поиска
-    private void performSearch() {
-        for (VacancyParser parser : parsers) {
-            try {
-                List<Vacancy> vacancies = parser.parseVacancies();
-                for (Vacancy vacancy : vacancies) {
-                    if (!vacancyRepository.existsByUrl(vacancy.getUrl())) {
-                        vacancyRepository.save(vacancy);
-                        sendTelegramMessage(vacancy);
-                        log.info("Отправлена вакансия: {}", vacancy.getTitle());
-                    }
+    /**
+     * БЫСТРЫЙ ПОТОК (Для легких платформ: Robota.ua, Djinni)
+     * Запуск: Строго каждые 5 минут, независимо от времени выполнения предыдущего цикла.
+     */
+    @Scheduled(fixedDelay = 300000)
+    public void scheduledFastSearch() {
+        log.info("⚡ [Real-time] Проверка новых вакансий на быстрых платформах...");
+
+        parsers.stream()
+                .filter(parser -> !parser.isHeavy())
+                .forEach(this::executeParser);
+    }
+
+    private void executeParser(VacancyParser parser) {
+        try {
+            List<Vacancy> vacancies = parser.parseVacancies();
+            for (Vacancy vacancy : vacancies) {
+                if (!vacancyRepository.existsByUrl(vacancy.getUrl())) {
+                    vacancyRepository.save(vacancy);
+                    sendTelegramMessage(vacancy);
+                    log.info("Отправлена вакансия: {}", vacancy.getTitle());
                 }
-            } catch (Exception e) {
-                log.error("Ошибка при парсинге в планировщике: {}", e.getMessage());
             }
+        } catch (Exception e) {
+            log.error("Ошибка при парсинге в классе {}: {}", parser.getClass().getSimpleName(), e.getMessage());
         }
     }
 
@@ -80,10 +92,9 @@ public class VacancyScheduler {
         telegramBot.sendMessage(chatId, message);
     }
 
-    // Твой метод очистки остается без изменений
     @Scheduled(cron = "0 0 3 * * *")
     public void cleanUpDatabase() {
-        log.info("Запуск автоматической очистки старых вакансий...");
+        log.info("🧹 Запуск автоматической очистки старых вакансий...");
         LocalDateTime cutoffDate = LocalDateTime.now().minusDays(15);
         try {
             int deletedCount = vacancyRepository.deleteOldVacancies(cutoffDate);

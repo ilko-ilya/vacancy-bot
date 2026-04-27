@@ -10,4 +10,8 @@ public interface VacancyParser {
 
     String getSiteName();
 
+    default boolean isHeavy() {
+        return false;
+    }
+
 }
